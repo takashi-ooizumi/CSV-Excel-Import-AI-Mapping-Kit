@@ -1,8 +1,15 @@
+# Node / Next.js (全階層)
+node_modules/
+.next/
+out/
+.turbo/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-/node_modules
-/.next
-/out
-/.turbo
+# Env
 .env
 .env.local
 .env.*.local
@@ -10,14 +17,14 @@
 # OS
 .DS_Store
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Go
+# Go (API)
 api/bin/
 api/dist/
 api/coverage/
-**/*.test
+
+# Coverage & build outputs (共通)
+coverage/
+dist/
+
+# 迷子になりやすいキャッシュ類
+**/.cache/
