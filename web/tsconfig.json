@@ -9,8 +9,7 @@
     "jsx": "preserve",
     "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "types": ["node", "react", "react-dom", "next"]
+    "skipLibCheck": true
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
