@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run API (Go)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/api/cmd/server",
+      "cwd": "${workspaceFolder}/api",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "API_PORT": "8080"
+      }
+    },
+    {
+      "name": "Run Web (Next.js dev)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Run Web + API",
+      "configurations": ["Run API (Go)", "Run Web (Next.js dev)"]
+    }
+  ]
+}
