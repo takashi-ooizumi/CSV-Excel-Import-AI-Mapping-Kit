@@ -82,11 +82,23 @@ docker compose -f deploy/docker-compose.yml up -d
 
 # db migration
 
-# up
-docker compose -f deploy/docker-compose.yml run --rm migrator up
-# 1つ戻す
-docker compose -f deploy/docker-compose.yml run --rm migrator down 1
-# または steps -1
-docker compose -f deploy/docker-compose.yml run --rm migrator steps -1
-# バージョン表示
-docker compose -f deploy/docker-compose.yml run --rm migrator version
+# 適用（up）
+docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm migrator up
+
+# 現在バージョン表示
+docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm migrator version
+
+# 1つ戻す（ロールバック）
+docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm migrator down 1
+
+# 2つ戻す
+docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm migrator steps -2
+
+.env.migrations には Direct(5432) の postgres:// 形式の URL を DATABASE_URL= で記載してください（sslmode=require 推奨）。
+
+アプリ実行時は .env の Pooling(6543) を使用します。
+
+# deploy
+web: vercel
+api: Render
+db: supabase https://supabase.com/dashboard/org/egudvdmoiftfuyzkhdfp

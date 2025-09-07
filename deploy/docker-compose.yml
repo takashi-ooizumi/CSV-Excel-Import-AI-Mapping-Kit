@@ -40,15 +40,20 @@ services:
       - "3000:3000"
     depends_on:
       - api
+      
   migrator:
     image: migrate/migrate:4
     volumes:
       - ../db/migrations:/migrations
-    env_file: ../.env
-    entrypoint: ["migrate","-path=/migrations","-database","${DATABASE_URL}"]
-    depends_on:
-      db:
-        condition: service_healthy
+    # 直結(5432)のURLをこのファイルから読む
+    env_file: ../.env.migrations
+    # $ を使わず、エントリポイントを配列で素直に渡す
+    entrypoint:
+      - migrate
+      - -path=/migrations
+      - -database
+      - ${DATABASE_URL}
+
 
 volumes:
   dbdata:
