@@ -45,10 +45,10 @@ services:
     volumes:
       - ../db/migrations:/migrations
     env_file: ../.env
+    entrypoint: ["migrate","-path=/migrations","-database","${DATABASE_URL}"]
     depends_on:
       db:
         condition: service_healthy
-    entrypoint: ["/bin/sh","-c","migrate -path=/migrations -database ${DATABASE_URL} up"]
 
 volumes:
   dbdata:

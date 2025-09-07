@@ -81,4 +81,12 @@ docker compose -f deploy/docker-compose.yml up -d
 # api: http://localhost:8080/healthz
 
 # db migration
-docker compose -f deploy/docker-compose.yml run --rm migrator
+
+# up
+docker compose -f deploy/docker-compose.yml run --rm migrator up
+# 1つ戻す
+docker compose -f deploy/docker-compose.yml run --rm migrator down 1
+# または steps -1
+docker compose -f deploy/docker-compose.yml run --rm migrator steps -1
+# バージョン表示
+docker compose -f deploy/docker-compose.yml run --rm migrator version
