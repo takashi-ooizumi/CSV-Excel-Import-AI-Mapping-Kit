@@ -40,6 +40,16 @@ services:
       - "3000:3000"
     depends_on:
       - api
+  migrator:
+    image: migrate/migrate:4
+    volumes:
+      - ../db/migrations:/migrations
+    env_file: ../.env
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["/bin/sh","-c","migrate -path=/migrations -database ${DATABASE_URL} up"]
 
 volumes:
   dbdata:
+

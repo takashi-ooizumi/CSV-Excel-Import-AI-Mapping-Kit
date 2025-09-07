@@ -1,7 +1,7 @@
 title="README.md"
 # CSV/Excel Import AI Mapping Kit
 
-中小〜スタートアップ向けに**「顧客/取引/商品などのCSV・Excelを“10分で取り込める”」**を目指した、**自動マッピング＋検証＋正規化**のミニ基盤です。  
+中小〜スタートアップ向けに**「顧客/取引/商品などのCSV・Excelを“10分で取り込める”」**を目指した、**自動マッピング＋検証＋正規化**のミニ基盤です。
 **実務の入口になりやすい課題**（他サービスからのデータ移行・他社SaaS連携）を、「スピード導入 × 信頼性 × 可観測性」で解きます。
 
 > **MVPのゴール**：**1万行のCSVをP95 < 30秒でプレビュー**し、列の自動マッピング提案 → バリデーション → **アトミックに本テーブルへコミット**。失敗行は理由を可視化。
@@ -61,6 +61,24 @@ flowchart LR
 ```
 ## 起動（Docker）
 
-docker compose -f deploy/docker-compose.yml up --build
+# リポジトリ直下で
+docker compose -f deploy/docker-compose.yml build --no-cache
+docker compose -f deploy/docker-compose.yml up -d
+
+# コンテナ削除
+docker compose -f deploy/docker-compose.yml down
+
+# コンテナ削除（ボリュームも削除）
+docker compose -f deploy/docker-compose.yml down -v
+
+# 停止
+docker compose -f deploy/docker-compose.yml stop
+
+# 再開
+docker compose -f deploy/docker-compose.yml up -d
+
 # web: http://localhost:3000
 # api: http://localhost:8080/healthz
+
+# db migration
+docker compose -f deploy/docker-compose.yml run --rm migrator
