@@ -98,6 +98,8 @@ docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm 
 
 アプリ実行時は .env の Pooling(6543) を使用します。
 
+migrationファイルは db/migrations 以下に格納
+
 # deploy
 web: vercel
 api: Render
