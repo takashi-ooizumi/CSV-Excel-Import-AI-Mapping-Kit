@@ -1,16 +1,13 @@
 services:
   - type: web
     name: csv-import-kit-api-prod
-    runtime: docker
+    runtime: docker          # もしエラーが出る場合は env: docker に変更
     plan: free
     region: singapore
     branch: main
     dockerfilePath: deploy/Dockerfile.api
     healthCheckPath: /readyz
     autoDeploy: true
-    serviceDetails:
-      port: 8080
 
-    # ここで Environment Group をまとめて適用
     envVars:
-      - fromGroup: csv-import-kit-prod
+      - fromGroup: csv-import-kit-prod   # ← 事前に作成した Environment Group 名
