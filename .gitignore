@@ -13,6 +13,7 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+/.env.migrations
 
 # OS
 .DS_Store
