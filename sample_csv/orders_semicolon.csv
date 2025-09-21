@@ -1,0 +1,5 @@
+order_id;customer_id;product;quantity;unit_price;order_date
+1001;1;Notebook;2;980;2024-06-01
+1002;1;Pencil;10;80;2024-06-02
+1003;3;"Paper A4, 500枚";1;650;2024-06-03
+1004;2;Eraser;3;120;2024-06-04

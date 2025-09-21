@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"csv-import-kit/api/internal/handlers"
 )
 
 func main() {
@@ -21,6 +22,8 @@ func main() {
 
 	r := chi.NewRouter()
 
+	r.Use((handlers.CORSMiddleware()))
+
 	// Basic health endpoints
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -30,6 +33,8 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ready"))
 	})
+
+	r.Post("/api/imports", handlers.HandleUploadPreview())
 
 	srv := &http.Server{
 		Addr:              ":" + port,
