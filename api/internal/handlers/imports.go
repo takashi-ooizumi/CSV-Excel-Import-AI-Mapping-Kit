@@ -19,11 +19,11 @@ const maxUploadMB = 20
 const previewRows = 20
 
 type previewResponse struct {
-	Delimiter string	 `json:"delimiter"`
-	HasHeader bool	 `json:"hasHeader"`
-	Headers []string `json:headers`
-	SampleRows [][]string `json:sampleRows`
-	CountGuessed int `json:countGuessed`
+	Delimiter    string     `json:"delimiter"`
+	HasHeader    bool       `json:"hasHeader"`
+	Headers      []string   `json:"headers"`
+	SampleRows   [][]string `json:"sampleRows"`
+	CountGuessed int        `json:"countGuessed"`
 }
 
 func HandleUploadPreview() http.HandlerFunc {
@@ -202,30 +202,55 @@ func normalizeHeaders(rec []string) []string {
 	return out
 }
 
-// CORS Middleware 複数Originをカンマ区切りで
+// CORS Middleware（複数Originをカンマ区切りで）
 func CORSMiddleware() func(next http.Handler) http.Handler {
-	origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+	// 両方の名前をサポート（複数形/単数形）
+	raw := strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("ALLOWED_ORIGIN"))
+	}
+	// 開発用デフォルト（未設定なら localhost:3000 を許可）
+	if raw == "" {
+		raw = "http://localhost:3000"
+	}
+
+	origins := strings.Split(raw, ",")
 	for i := range origins {
 		origins[i] = strings.TrimSpace(origins[i])
 	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
+			allowed := ""
 			for _, o := range origins {
+				if o == "*" {
+					allowed = "*"
+					break
+				}
 				if o != "" && origin == o {
-					w.Header().Set("Access-Control-Allow-Origin", o)
-					w.Header().Set("Vary", "Origin")
-					w.Header().Set("Acccess-Control-Allow-Headers", "Content-Type, X-API-Key")
-					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+					allowed = o
 					break
 				}
 			}
-			if r.Method == http.MethodOptions {
+
+			// 許可が決まったときだけヘッダを付与
+			if allowed != "" {
+				w.Header().Set("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Origin", allowed)
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+			}
+
+			// プリフライトは許可が決まった時だけ 204 を返す
+			if r.Method == http.MethodOptions && allowed != "" {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
+
 			next.ServeHTTP(w, r)
 		})
 	}
 }
+
 

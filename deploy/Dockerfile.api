@@ -1,16 +1,20 @@
-# --- build stage ---
-FROM golang:1.22-alpine AS builder
+# ---- Build stage ------------------------------------------------------------
+FROM golang:1.23 AS builder
 WORKDIR /app
-RUN apk add --no-cache git ca-certificates
-COPY api/go.mod ./
+
+# 依存解決（キャッシュ効かせるため go.mod/go.sum だけ先に）
+COPY api/go.mod api/go.sum ./
 RUN go mod download
+
+# ソース
 COPY api/ ./
+ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
 RUN go build -o /bin/server ./cmd/server
 
-# --- run stage ---
-FROM alpine:3.20
-WORKDIR /app
-ENV API_PORT=8080
-COPY --from=builder /bin/server /bin/server
+# ---- Runtime stage ----------------------------------------------------------
+FROM gcr.io/distroless/base-debian12:nonroot
 EXPOSE 8080
-CMD ["/bin/server"]
+ENV API_PORT=8080
+COPY --from=builder /bin/server /server
+USER nonroot:nonroot
+ENTRYPOINT ["/server"]
