@@ -64,16 +64,14 @@ flowchart LR
 # リポジトリ直下で
 docker compose -f deploy/docker-compose.yml build --no-cache
 docker compose -f deploy/docker-compose.yml up -d
-
+# 再ビルド & 再起動
+docker compose -f deploy/docker-compose.yml up -d --build
 # コンテナ削除
 docker compose -f deploy/docker-compose.yml down
-
 # コンテナ削除（ボリュームも削除）
 docker compose -f deploy/docker-compose.yml down -v
-
 # 停止
 docker compose -f deploy/docker-compose.yml stop
-
 # 再開
 docker compose -f deploy/docker-compose.yml up -d
 
