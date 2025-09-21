@@ -99,6 +99,6 @@ docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm 
 migrationファイルは db/migrations 以下に格納
 
 # deploy
-web: vercel
-api: Render
+web: vercel https://csv-excel-import-ai-mapping-kit.vercel.app/
+api: Render https://csv-import-kit-api-prod.onrender.com
 db: supabase https://supabase.com/dashboard/org/egudvdmoiftfuyzkhdfp
