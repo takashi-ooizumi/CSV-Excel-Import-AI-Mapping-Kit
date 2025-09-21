@@ -1,0 +1,5 @@
+id,name,email,age,signup_date,is_active,notes
+1,山田 太郎,taro@example.com,34,2024-01-15,true,
+2,佐藤 花子,hanako@example.com,28,2024-02-03,false,退会希望
+3,"Acme, Inc.","info@acme.co",,2024-03-20,true,"カンマ, 二重引用符 ""あり"""
+4,李 小龍,bruce@example.com,42,2024-05-01,true,UTF-8テスト
