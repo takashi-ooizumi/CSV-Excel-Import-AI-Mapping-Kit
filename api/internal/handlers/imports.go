@@ -305,34 +305,36 @@ func isKeyValue(s string) bool {
 }
 
 func normalizeHeaders(rec []string) []string {
-	out := make([]string, len(rec))
-	used := map[string]int{}
-	for i, v := range rec {
-		name := strings.TrimSpace(v)
-		if name == "" {
-			name = "col_" + strconv.Itoa(i+1)
-		}
-		// シンプルに正規化
-		name = strings.ToLower(name)
-		name = strings.ReplaceAll(name, " ", "_")
-		name = strings.ReplaceAll(name, "-", "_")
-		// 非ASCIIはそのまま許容（可視性だけ注意）
-		if !utf8.ValidString(name) {
-			name = "col_" + strconv.Itoa(i+1)
-		}
-		// 重複回避
-		key := name
-		if _, ok := used[key]; ok {
-			used[key] = 1
-		} else {
-			cnt := used[key]
-			used[key] = cnt + 1
-			name = key + "_" + strconv.Itoa(cnt)
-		}
-		out[i] = name
-	}
-	return out
+    out := make([]string, len(rec))
+    used := map[string]int{}
+    for i, v := range rec {
+        name := strings.TrimSpace(v)
+        if name == "" {
+            name = "col_" + strconv.Itoa(i+1)
+        }
+        // 正規化
+        name = strings.ToLower(name)
+        name = strings.ReplaceAll(name, " ", "_")
+        name = strings.ReplaceAll(name, "-", "_")
+        if !utf8.ValidString(name) {
+            name = "col_" + strconv.Itoa(i+1)
+        }
+
+        // 重複回避（修正後）
+        key := name
+        if _, ok := used[key]; !ok {
+            used[key] = 1            // 初回：そのまま
+        } else {
+            cnt := used[key]         // 2回目以降：_1, _2...
+            used[key] = cnt + 1
+            name = key + "_" + strconv.Itoa(cnt)
+        }
+
+        out[i] = name
+    }
+    return out
 }
+
 
 // CORS Middleware（複数Originをカンマ区切りで）
 func CORSMiddleware() func(next http.Handler) http.Handler {
