@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+
 	//"mime/multipart"
 	"net/http"
 	"os"
@@ -27,9 +28,9 @@ type previewResponse struct {
 }
 
 func HandleUploadPreview() http.HandlerFunc {
-	return func (w http.ResponseWriter, r *http.Request)  {
+	return func(w http.ResponseWriter, r *http.Request) {
 		// サイズ制限
-		r.Body = http.MaxBytesReader(w, r.Body, int64(maxUploadMB << 20)) // 20MB
+		r.Body = http.MaxBytesReader(w, r.Body, int64(maxUploadMB<<20)) // 20MB
 
 		// multipart 取得
 		file, _, err := r.FormFile("file")
@@ -41,7 +42,7 @@ func HandleUploadPreview() http.HandlerFunc {
 
 		// 全体をバッファ（小〜中サイズ前提。大きくなればストリーミングに変更）
 		var buf bytes.Buffer
-		if _, err:= io.Copy(&buf, file); err != nil {
+		if _, err := io.Copy(&buf, file); err != nil {
 			http.Error(w, "read error", http.StatusBadRequest)
 			return
 		}
@@ -59,17 +60,17 @@ func HandleUploadPreview() http.HandlerFunc {
 		reader := csv.NewReader(bytes.NewReader(b))
 		reader.Comma = rune(del[0])
 		reader.FieldsPerRecord = -1 // 可変長対応
-		reader.LazyQuotes = true // 厳密なクオートチェックをしない
+		reader.LazyQuotes = true    // 厳密なクオートチェックをしない
 
 		// 先頭行をpeek
 		all := make([][]string, 0, previewRows+1)
-		for i := 0; i < previewRows + 1; i++ {
+		for i := 0; i < previewRows+1; i++ {
 			rec, err := reader.Read()
 			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {
-				http.Error(w, "csv parse error: " + err.Error(), http.StatusBadRequest)
+				http.Error(w, "csv parse error: "+err.Error(), http.StatusBadRequest)
 				return
 			}
 			all = append(all, rec)
@@ -99,10 +100,10 @@ func HandleUploadPreview() http.HandlerFunc {
 
 		// レスポンス
 		resp := previewResponse{
-			Delimiter: del,
-			HasHeader: hasHeader,
-			Headers: headers,
-			SampleRows: rows,
+			Delimiter:    del,
+			HasHeader:    hasHeader,
+			Headers:      headers,
+			SampleRows:   rows,
 			CountGuessed: len(rows),
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -170,12 +171,12 @@ func looksLikeHeader(first []string, next []string) bool {
 }
 
 type rowStat struct {
-	alphaWordRatio     float64
-	numericLikeRatio   float64
-	datetimeLikeRatio  float64
-	keyValueRatio      float64
-	emptyRatio         float64
-	hasDup             bool
+	alphaWordRatio    float64
+	numericLikeRatio  float64
+	datetimeLikeRatio float64
+	keyValueRatio     float64
+	emptyRatio        float64
+	hasDup            bool
 }
 
 func rowStats(cols []string) rowStat {
@@ -215,12 +216,12 @@ func rowStats(cols []string) rowStat {
 	}
 
 	return rowStat{
-		alphaWordRatio:     float64(alpha) / n,
-		numericLikeRatio:   float64(numeric) / n,
-		datetimeLikeRatio:  float64(dt) / n,
-		keyValueRatio:      float64(kv) / n,
-		emptyRatio:         float64(empty) / n,
-		hasDup:             dup,
+		alphaWordRatio:    float64(alpha) / n,
+		numericLikeRatio:  float64(numeric) / n,
+		datetimeLikeRatio: float64(dt) / n,
+		keyValueRatio:     float64(kv) / n,
+		emptyRatio:        float64(empty) / n,
+		hasDup:            dup,
 	}
 }
 
@@ -305,36 +306,35 @@ func isKeyValue(s string) bool {
 }
 
 func normalizeHeaders(rec []string) []string {
-    out := make([]string, len(rec))
-    used := map[string]int{}
-    for i, v := range rec {
-        name := strings.TrimSpace(v)
-        if name == "" {
-            name = "col_" + strconv.Itoa(i+1)
-        }
-        // 正規化
-        name = strings.ToLower(name)
-        name = strings.ReplaceAll(name, " ", "_")
-        name = strings.ReplaceAll(name, "-", "_")
-        if !utf8.ValidString(name) {
-            name = "col_" + strconv.Itoa(i+1)
-        }
+	out := make([]string, len(rec))
+	used := map[string]int{}
+	for i, v := range rec {
+		name := strings.TrimSpace(v)
+		if name == "" {
+			name = "col_" + strconv.Itoa(i+1)
+		}
+		// 正規化
+		name = strings.ToLower(name)
+		name = strings.ReplaceAll(name, " ", "_")
+		name = strings.ReplaceAll(name, "-", "_")
+		if !utf8.ValidString(name) {
+			name = "col_" + strconv.Itoa(i+1)
+		}
 
-        // 重複回避（修正後）
-        key := name
-        if _, ok := used[key]; !ok {
-            used[key] = 1            // 初回：そのまま
-        } else {
-            cnt := used[key]         // 2回目以降：_1, _2...
-            used[key] = cnt + 1
-            name = key + "_" + strconv.Itoa(cnt)
-        }
+		// 重複回避（修正後）
+		key := name
+		if _, ok := used[key]; !ok {
+			used[key] = 1 // 初回：そのまま
+		} else {
+			cnt := used[key] // 2回目以降：_1, _2...
+			used[key] = cnt + 1
+			name = key + "_" + strconv.Itoa(cnt)
+		}
 
-        out[i] = name
-    }
-    return out
+		out[i] = name
+	}
+	return out
 }
-
 
 // CORS Middleware（複数Originをカンマ区切りで）
 func CORSMiddleware() func(next http.Handler) http.Handler {
@@ -386,5 +386,3 @@ func CORSMiddleware() func(next http.Handler) http.Handler {
 		})
 	}
 }
-
-

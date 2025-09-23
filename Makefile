@@ -1,18 +1,16 @@
-.PHONY: api.test api.lint api.fmt web.lint web.fmt all
+.PHONY: fmt test check all api.fmt api.test
 
-api.test:
-	cd api && go test ./...
-
-api.lint:
-	cd api && golangci-lint run ./...
+fmt: api.fmt
+	cd web && npm run prettier:write
 
 api.fmt:
-	cd api && go fmt ./...
+	cd api && goimports -w . && go fmt ./...
 
-web.lint:
-	cd web && npm run lint
+test:
+	cd api && go vet ./... && go test ./...
 
-web.fmt:
-	cd web && npm run prettier:check
+check:
+	cd web && npm run prettier:check && npm run typecheck
+	cd api && go vet ./... && go test ./...
 
-all: api.fmt api.lint api.test web.fmt web.lint
+all: fmt check

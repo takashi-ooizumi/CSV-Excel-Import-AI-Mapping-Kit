@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+set -e
+
+echo "→ Go fmt"
+cd api && go fmt ./... && cd - >/dev/null
+
+echo "→ Go lint (golangci-lint)"
+if ! command -v golangci-lint >/dev/null 2>&1; then
+  echo "golangci-lint が未インストールです。macOSなら: brew install golangci-lint"
+  exit 1
+fi
+(cd api && golangci-lint run ./...)
+
+echo "→ Web: Prettier check"
+(cd web && npm run -s prettier:check)
+
+echo "→ Web: ESLint"
+(cd web && npm run -s lint)
