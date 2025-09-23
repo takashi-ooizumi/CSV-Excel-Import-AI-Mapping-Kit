@@ -1,5 +1,5 @@
-'use client';
-import React, { useState } from 'react';
+"use client";
+import React, { useState } from "react";
 
 type Preview = {
   delimiter: string;
@@ -21,8 +21,8 @@ export default function ImportPage() {
     setLoading(true);
     try {
       const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch(`${apiBase}/api/imports`, { method: 'POST', body: fd });
+      fd.append("file", file);
+      const res = await fetch(`${apiBase}/api/imports`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
       const data: Preview = await res.json();
       setPreview(data);
@@ -48,7 +48,7 @@ export default function ImportPage() {
           disabled={!file || loading}
           className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
         >
-          {loading ? 'Uploading...' : 'Upload & Preview'}
+          {loading ? "Uploading..." : "Upload & Preview"}
         </button>
       </form>
 
@@ -57,7 +57,9 @@ export default function ImportPage() {
           <div className="text-sm text-gray-600 mb-2">
             delimiter: <b>{preview.delimiter}</b> / hasHeader: <b>{String(preview.hasHeader)}</b>
           </div>
-          <table className="min-w-[800px] border-collapse"> {/* ← Tailwind の bracket 構文 */}
+          <table className="min-w-[800px] border-collapse">
+            {" "}
+            {/* ← Tailwind の bracket 構文 */}
             <thead>
               <tr>
                 {preview.headers.map((h, i) => (
@@ -67,7 +69,9 @@ export default function ImportPage() {
                 ))}
               </tr>
             </thead>
-            <tbody> {/* ← tbody を thead の外へ */}
+            <tbody>
+              {" "}
+              {/* ← tbody を thead の外へ */}
               {preview.sampleRows.map((row, r) => (
                 <tr key={r}>
                   {row.map((cell, c) => (

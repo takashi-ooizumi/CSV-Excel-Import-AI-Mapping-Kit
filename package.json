@@ -1,0 +1,13 @@
+{
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.0"
+  },
+  "scripts": {
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "api/**/*.go": ["golangci-lint run --out-format=colored-line-number ./api/..."],
+    "web/**/*.{ts,tsx,js,jsx,css,md,json}": ["prettier --write"]
+  }
+}

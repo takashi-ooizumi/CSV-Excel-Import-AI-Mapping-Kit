@@ -1,0 +1,28 @@
+version: 2
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - gosimple
+    - govet
+    - staticcheck
+    - unused
+    - errcheck
+    - ineffassign
+    - gocritic
+    - misspell
+    - revive
+
+issues:
+  exclude-use-default: false
+
+linters-settings:
+  revive:
+    severity: warning
+    rules:
+      - name: indent-error-flow
+      - name: exported
+        disabled: true

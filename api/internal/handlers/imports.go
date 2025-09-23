@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+
 	//"mime/multipart"
 	"net/http"
 	"os"
@@ -27,9 +28,9 @@ type previewResponse struct {
 }
 
 func HandleUploadPreview() http.HandlerFunc {
-	return func (w http.ResponseWriter, r *http.Request)  {
+	return func(w http.ResponseWriter, r *http.Request) {
 		// サイズ制限
-		r.Body = http.MaxBytesReader(w, r.Body, int64(maxUploadMB << 20)) // 20MB
+		r.Body = http.MaxBytesReader(w, r.Body, int64(maxUploadMB<<20)) // 20MB
 
 		// multipart 取得
 		file, _, err := r.FormFile("file")
@@ -41,7 +42,7 @@ func HandleUploadPreview() http.HandlerFunc {
 
 		// 全体をバッファ（小〜中サイズ前提。大きくなればストリーミングに変更）
 		var buf bytes.Buffer
-		if _, err:= io.Copy(&buf, file); err != nil {
+		if _, err := io.Copy(&buf, file); err != nil {
 			http.Error(w, "read error", http.StatusBadRequest)
 			return
 		}
@@ -59,17 +60,17 @@ func HandleUploadPreview() http.HandlerFunc {
 		reader := csv.NewReader(bytes.NewReader(b))
 		reader.Comma = rune(del[0])
 		reader.FieldsPerRecord = -1 // 可変長対応
-		reader.LazyQuotes = true // 厳密なクオートチェックをしない
+		reader.LazyQuotes = true    // 厳密なクオートチェックをしない
 
 		// 先頭行をpeek
 		all := make([][]string, 0, previewRows+1)
-		for i := 0; i < previewRows + 1; i++ {
+		for i := 0; i < previewRows+1; i++ {
 			rec, err := reader.Read()
 			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {
-				http.Error(w, "csv parse error: " + err.Error(), http.StatusBadRequest)
+				http.Error(w, "csv parse error: "+err.Error(), http.StatusBadRequest)
 				return
 			}
 			all = append(all, rec)
@@ -78,28 +79,31 @@ func HandleUploadPreview() http.HandlerFunc {
 		var headers []string
 		hasHeader := false
 		rows := all
-		if len(all) > 0 && looksLikeHeader(all[0]) {
-			hasHeader = true
-			headers = normalizeHeaders(all[0])
+		// ヘッダー判定
+		if len(all) > 0 {
+			var next []string
 			if len(all) > 1 {
+				next = all[1]
+			}
+			if looksLikeHeader(all[0], next) {
+				hasHeader = true
+				headers = normalizeHeaders(all[0])
 				rows = all[1:]
 			} else {
-				rows = [][]string{}
-			}
-		} else if len(all) > 0 {
-			// ヘッダーなしならカラム名を自動生成
-			headers = make([]string, len(all[0]))
-			for i := range headers {
-				headers[i] = "col_" + strconv.Itoa(i+1)
+				// ヘッダーなしならカラム名を自動生成
+				headers = make([]string, len(all[0]))
+				for i := range headers {
+					headers[i] = "col_" + strconv.Itoa(i+1)
+				}
 			}
 		}
 
 		// レスポンス
 		resp := previewResponse{
-			Delimiter: del,
-			HasHeader: hasHeader,
-			Headers: headers,
-			SampleRows: rows,
+			Delimiter:    del,
+			HasHeader:    hasHeader,
+			Headers:      headers,
+			SampleRows:   rows,
 			CountGuessed: len(rows),
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -132,44 +136,173 @@ func guessDelimiter(b []byte) string {
 	return string([]byte{best})
 }
 
-func looksLikeHeader(rec []string) bool {
-	// 漢字　数字　アンダースコア　スペース　ハイフン程度で構成、かつ重複と空が少ないならヘッダーと推測
-	if len(rec) == 0 {
+// 先頭行がヘッダらしいか？ 2行目(next)を見てコントラスト判定も行う
+func looksLikeHeader(first []string, next []string) bool {
+	if len(first) == 0 {
 		return false
 	}
+	// 指標を取る
+	statsFirst := rowStats(first)
+	// ヘッダの素点: 英字主体が6割以上、かつ kv/numeric/datetime が多すぎない
+	headerish := statsFirst.alphaWordRatio >= 0.60 &&
+		statsFirst.keyValueRatio < 0.20 &&
+		statsFirst.numericLikeRatio < 0.40 &&
+		statsFirst.datetimeLikeRatio < 0.40 &&
+		statsFirst.emptyRatio <= 0.34 &&
+		!statsFirst.hasDup
+
+	if !headerish {
+		return false
+	}
+	// 2行目があるなら、データ行っぽさ（数値・日時・kvが増える）で後押し
+	if len(next) > 0 {
+		statsNext := rowStats(next)
+		// 次行は英字主体が少なめ、かつ数値/日時/kvが一定以上
+		contrastOK := statsNext.alphaWordRatio <= 0.50 ||
+			statsNext.numericLikeRatio >= 0.30 ||
+			statsNext.datetimeLikeRatio >= 0.20 ||
+			statsNext.keyValueRatio >= 0.20
+		if !contrastOK {
+			// コントラストが無いならヘッダとは言い切らない
+			return false
+		}
+	}
+	return true
+}
+
+type rowStat struct {
+	alphaWordRatio    float64
+	numericLikeRatio  float64
+	datetimeLikeRatio float64
+	keyValueRatio     float64
+	emptyRatio        float64
+	hasDup            bool
+}
+
+func rowStats(cols []string) rowStat {
+	n := float64(len(cols))
+	if n == 0 {
+		return rowStat{}
+	}
 	seen := map[string]struct{}{}
-	empties := 0
-	for _, v := range rec {
-		name := strings.TrimSpace(v)
-		if name == "" {
-			empties++
+	dup := false
+	alpha, numeric, dt, kv, empty := 0, 0, 0, 0, 0
+
+	for _, raw := range cols {
+		s := strings.TrimSpace(raw)
+		if s == "" {
+			empty++
 			continue
 		}
-		// 記号だらけならデータ行の可能性
-		valid := 0
-		for _, r := range name {
-			if r == '_' || r == '-' || r == ' ' || r == '/' || r == '.' {
-				valid++
-				continue
-			}
-			if r >= '0' && r <= '9' {
-				// 数値だらけの列名は微妙
-				continue
-			}
-			if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r > 127{
-				valid++
-			}
+		low := strings.ToLower(s)
+		if _, ok := seen[low]; ok {
+			dup = true
+		} else {
+			seen[low] = struct{}{}
 		}
-		if valid == 0 {
-			return false
+
+		if isKeyValue(s) {
+			kv++
 		}
-		if _, ok := seen[strings.ToLower(name)]; ok {
-			// 重複カラム名かも、ヘッダー性を下げる
-			return false
+		if isDateTimeLike(s) {
+			dt++
 		}
-		seen[strings.ToLower(name)] = struct{}{}
+		if isNumericLike(s) {
+			numeric++
+		}
+		if isAlphaWord(s) {
+			alpha++
+		}
 	}
-	return empties <= len(rec) / 3
+
+	return rowStat{
+		alphaWordRatio:    float64(alpha) / n,
+		numericLikeRatio:  float64(numeric) / n,
+		datetimeLikeRatio: float64(dt) / n,
+		keyValueRatio:     float64(kv) / n,
+		emptyRatio:        float64(empty) / n,
+		hasDup:            dup,
+	}
+}
+
+func isAlphaWord(s string) bool {
+	// 英字・空白・アンダースコアのみ（数字/記号/=.:- を含んだら除外）
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r == ' ' || r == '_' {
+			continue
+		}
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+			continue
+		}
+		// 数字やよくある記号が混ざっていたら英字主体とはみなさない
+		return false
+	}
+	return true
+}
+
+func isNumericLike(s string) bool {
+	// 数字・小数・符号・桁区切り・百分率程度
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	dots := 0
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+		case r == '.' || r == ',':
+			dots++
+			if dots > 3 {
+				return false
+			}
+		case r == '+' || r == '-' || r == '%':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isDateTimeLike(s string) bool {
+	// ざっくり："YYYY-MM-DD" や "YYYY/MM/DD hh:mm:ss" など数字と -/: と空白で構成
+	if s == "" {
+		return false
+	}
+	hasDigit := false
+	for _, r := range s {
+		if (r >= '0' && r <= '9') || r == '-' || r == '/' || r == ':' || r == ' ' || r == 'T' || r == 'Z' {
+			if r >= '0' && r <= '9' {
+				hasDigit = true
+			}
+			continue
+		}
+		return false
+	}
+	return hasDigit
+}
+
+func isKeyValue(s string) bool {
+	// user=1 / ip=203.0.113.10 のような key=value を判定
+	if strings.Count(s, "=") != 1 {
+		return false
+	}
+	parts := strings.SplitN(s, "=", 2)
+	key := strings.TrimSpace(parts[0])
+	val := strings.TrimSpace(parts[1])
+	if key == "" || val == "" {
+		return false
+	}
+	// キーは英字/数字/アンダースコアのみ
+	for _, r := range key {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func normalizeHeaders(rec []string) []string {
@@ -180,23 +313,24 @@ func normalizeHeaders(rec []string) []string {
 		if name == "" {
 			name = "col_" + strconv.Itoa(i+1)
 		}
-		// シンプルに正規化
+		// 正規化
 		name = strings.ToLower(name)
 		name = strings.ReplaceAll(name, " ", "_")
 		name = strings.ReplaceAll(name, "-", "_")
-		// 非ASCIIはそのまま許容（可視性だけ注意）
 		if !utf8.ValidString(name) {
 			name = "col_" + strconv.Itoa(i+1)
 		}
-		// 重複回避
+
+		// 重複回避（修正後）
 		key := name
-		if _, ok := used[key]; ok {
-			used[key] = 1
+		if _, ok := used[key]; !ok {
+			used[key] = 1 // 初回：そのまま
 		} else {
-			cnt := used[key]
+			cnt := used[key] // 2回目以降：_1, _2...
 			used[key] = cnt + 1
 			name = key + "_" + strconv.Itoa(cnt)
 		}
+
 		out[i] = name
 	}
 	return out
@@ -252,5 +386,3 @@ func CORSMiddleware() func(next http.Handler) http.Handler {
 		})
 	}
 }
-
-

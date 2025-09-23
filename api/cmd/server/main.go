@@ -6,8 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"csv-import-kit/api/internal/handlers"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func main() {

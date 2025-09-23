@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+set -e
+
+echo "→ Go fmt"
+cd api && go fmt ./... && cd - >/dev/null
+
+echo "→ Web: Prettier check"
+(cd web && npm run -s prettier:check)
+
+echo "→ Web: ESLint"
+(cd web && npm run -s lint)
