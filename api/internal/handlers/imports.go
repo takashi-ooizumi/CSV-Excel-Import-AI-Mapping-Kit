@@ -78,19 +78,22 @@ func HandleUploadPreview() http.HandlerFunc {
 		var headers []string
 		hasHeader := false
 		rows := all
-		if len(all) > 0 && looksLikeHeader(all[0]) {
-			hasHeader = true
-			headers = normalizeHeaders(all[0])
+		// ヘッダー判定
+		if len(all) > 0 {
+			var next []string
 			if len(all) > 1 {
+				next = all[1]
+			}
+			if looksLikeHeader(all[0], next) {
+				hasHeader = true
+				headers = normalizeHeaders(all[0])
 				rows = all[1:]
 			} else {
-				rows = [][]string{}
-			}
-		} else if len(all) > 0 {
-			// ヘッダーなしならカラム名を自動生成
-			headers = make([]string, len(all[0]))
-			for i := range headers {
-				headers[i] = "col_" + strconv.Itoa(i+1)
+				// ヘッダーなしならカラム名を自動生成
+				headers = make([]string, len(all[0]))
+				for i := range headers {
+					headers[i] = "col_" + strconv.Itoa(i+1)
+				}
 			}
 		}
 
@@ -132,44 +135,173 @@ func guessDelimiter(b []byte) string {
 	return string([]byte{best})
 }
 
-func looksLikeHeader(rec []string) bool {
-	// 漢字　数字　アンダースコア　スペース　ハイフン程度で構成、かつ重複と空が少ないならヘッダーと推測
-	if len(rec) == 0 {
+// 先頭行がヘッダらしいか？ 2行目(next)を見てコントラスト判定も行う
+func looksLikeHeader(first []string, next []string) bool {
+	if len(first) == 0 {
 		return false
 	}
+	// 指標を取る
+	statsFirst := rowStats(first)
+	// ヘッダの素点: 英字主体が6割以上、かつ kv/numeric/datetime が多すぎない
+	headerish := statsFirst.alphaWordRatio >= 0.60 &&
+		statsFirst.keyValueRatio < 0.20 &&
+		statsFirst.numericLikeRatio < 0.40 &&
+		statsFirst.datetimeLikeRatio < 0.40 &&
+		statsFirst.emptyRatio <= 0.34 &&
+		!statsFirst.hasDup
+
+	if !headerish {
+		return false
+	}
+	// 2行目があるなら、データ行っぽさ（数値・日時・kvが増える）で後押し
+	if len(next) > 0 {
+		statsNext := rowStats(next)
+		// 次行は英字主体が少なめ、かつ数値/日時/kvが一定以上
+		contrastOK := statsNext.alphaWordRatio <= 0.50 ||
+			statsNext.numericLikeRatio >= 0.30 ||
+			statsNext.datetimeLikeRatio >= 0.20 ||
+			statsNext.keyValueRatio >= 0.20
+		if !contrastOK {
+			// コントラストが無いならヘッダとは言い切らない
+			return false
+		}
+	}
+	return true
+}
+
+type rowStat struct {
+	alphaWordRatio     float64
+	numericLikeRatio   float64
+	datetimeLikeRatio  float64
+	keyValueRatio      float64
+	emptyRatio         float64
+	hasDup             bool
+}
+
+func rowStats(cols []string) rowStat {
+	n := float64(len(cols))
+	if n == 0 {
+		return rowStat{}
+	}
 	seen := map[string]struct{}{}
-	empties := 0
-	for _, v := range rec {
-		name := strings.TrimSpace(v)
-		if name == "" {
-			empties++
+	dup := false
+	alpha, numeric, dt, kv, empty := 0, 0, 0, 0, 0
+
+	for _, raw := range cols {
+		s := strings.TrimSpace(raw)
+		if s == "" {
+			empty++
 			continue
 		}
-		// 記号だらけならデータ行の可能性
-		valid := 0
-		for _, r := range name {
-			if r == '_' || r == '-' || r == ' ' || r == '/' || r == '.' {
-				valid++
-				continue
-			}
-			if r >= '0' && r <= '9' {
-				// 数値だらけの列名は微妙
-				continue
-			}
-			if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r > 127{
-				valid++
-			}
+		low := strings.ToLower(s)
+		if _, ok := seen[low]; ok {
+			dup = true
+		} else {
+			seen[low] = struct{}{}
 		}
-		if valid == 0 {
-			return false
+
+		if isKeyValue(s) {
+			kv++
 		}
-		if _, ok := seen[strings.ToLower(name)]; ok {
-			// 重複カラム名かも、ヘッダー性を下げる
-			return false
+		if isDateTimeLike(s) {
+			dt++
 		}
-		seen[strings.ToLower(name)] = struct{}{}
+		if isNumericLike(s) {
+			numeric++
+		}
+		if isAlphaWord(s) {
+			alpha++
+		}
 	}
-	return empties <= len(rec) / 3
+
+	return rowStat{
+		alphaWordRatio:     float64(alpha) / n,
+		numericLikeRatio:   float64(numeric) / n,
+		datetimeLikeRatio:  float64(dt) / n,
+		keyValueRatio:      float64(kv) / n,
+		emptyRatio:         float64(empty) / n,
+		hasDup:             dup,
+	}
+}
+
+func isAlphaWord(s string) bool {
+	// 英字・空白・アンダースコアのみ（数字/記号/=.:- を含んだら除外）
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r == ' ' || r == '_' {
+			continue
+		}
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+			continue
+		}
+		// 数字やよくある記号が混ざっていたら英字主体とはみなさない
+		return false
+	}
+	return true
+}
+
+func isNumericLike(s string) bool {
+	// 数字・小数・符号・桁区切り・百分率程度
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	dots := 0
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+		case r == '.' || r == ',':
+			dots++
+			if dots > 3 {
+				return false
+			}
+		case r == '+' || r == '-' || r == '%':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isDateTimeLike(s string) bool {
+	// ざっくり："YYYY-MM-DD" や "YYYY/MM/DD hh:mm:ss" など数字と -/: と空白で構成
+	if s == "" {
+		return false
+	}
+	hasDigit := false
+	for _, r := range s {
+		if (r >= '0' && r <= '9') || r == '-' || r == '/' || r == ':' || r == ' ' || r == 'T' || r == 'Z' {
+			if r >= '0' && r <= '9' {
+				hasDigit = true
+			}
+			continue
+		}
+		return false
+	}
+	return hasDigit
+}
+
+func isKeyValue(s string) bool {
+	// user=1 / ip=203.0.113.10 のような key=value を判定
+	if strings.Count(s, "=") != 1 {
+		return false
+	}
+	parts := strings.SplitN(s, "=", 2)
+	key := strings.TrimSpace(parts[0])
+	val := strings.TrimSpace(parts[1])
+	if key == "" || val == "" {
+		return false
+	}
+	// キーは英字/数字/アンダースコアのみ
+	for _, r := range key {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func normalizeHeaders(rec []string) []string {
