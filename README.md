@@ -1,104 +1,234 @@
-title="README.md"
-# CSV/Excel Import AI Mapping Kit
+# CSV / Excel Import AI Mapping Kit
 
-中小〜スタートアップ向けに**「顧客/取引/商品などのCSV・Excelを“10分で取り込める”」**を目指した、**自動マッピング＋検証＋正規化**のミニ基盤です。
-**実務の入口になりやすい課題**（他サービスからのデータ移行・他社SaaS連携）を、「スピード導入 × 信頼性 × 可観測性」で解きます。
+**CSV/Excel の取り込み → ヘッダー推定 → スキーマへのマッピング → 正規化データのダウンロード**  
+フロントは **Next.js**、API は **Go(chi)**。**Supabase(Postgres)** を使った永続化、**Render/Vercel** でのデプロイに対応します。
 
-> **MVPのゴール**：**1万行のCSVをP95 < 30秒でプレビュー**し、列の自動マッピング提案 → バリデーション → **アトミックに本テーブルへコミット**。失敗行は理由を可視化。
+> 目的：スタートアップ/中小企業で頻出の「バラバラな CSV/Excel を毎回手で揃える」作業を、**スピード導入 × 安定性**で解決するミニ基盤。
 
 ---
 
-## 特徴（MVP）
-- **自動マッピング**：列名の同義語・類似度・サンプル値から**候補**を提案（手動修正可、confidence付き）
-- **バリデーション & 正規化**：email/phone/date/currency/address 等の型検証・整形
-- **アトミックコミット**：`/commit` で1トランザクション投入。**監査ログ**と**冪等性キー**で二重適用防止
-- **可観測性**：OpenTelemetry対応（トレース/メトリクス/ログ）。**ボトルネックが見える**
-- **UI ウィザード**：アップロード → マッピング調整 → 検証結果レビュー → コミット
+## ✨ 特徴（MVP）
+
+- **自動マッピング（推測）**：列名の同義語/類似や値サンプルから候補を提示（手動修正可）
+- **正規化プレビュー**：サーバ API でマッピングを適用して結果を表示（将来の保存/大規模化に対応）
+- **ダウンロード**：正規化データを **CSV / JSON** で保存
+- **CORS/ヘルス**：`/readyz` / `/livez` 実装、Render/Vercel でそのまま動作
 - **軽量スタック**：Go API（chi + pgx）/ Next.js（App Router）/ Postgres / Docker
 
-> 将来（任意）：LLM連携でマッピング精度補助（OpenAI/ローカル）。まずは**規則ベース**で安定化。
+---
+
+## 🧱 Tech Stack
+
+- **Web**: Next.js (App Router, TypeScript), Tailwind CSS  
+- **API**: Go 1.23+, Chi Router, Distroless で軽量ランタイム  
+- **DB**: Supabase(Postgres 15)  
+- **Infra**: Docker / docker-compose（ローカル用）、Render(API) / Vercel(Web)  
+- **DX**: `make fmt`（Go fmt + Prettier）、`make check`（go vet/test + tsc + prettier:check）、Husky pre-commit（format only）
 
 ---
 
-## なぜモノレポ？
-- `docker compose up` で **web/api/db** を一括起動（デモ・検収・E2Eが楽）
-- **Issue/PR/CI** を一本化：共通の品質ゲート（lint/test/build/k6）を適用
-- スキーマ変更・API変更が **UIと同じPRで同期** できる（齟齬が減る）
-- 将来は `pkg/` で共通ライブラリ（型/バリデーション）も共有可能
-
----
-
-## アーキテクチャ
+## 🏗️ アーキテクチャ
 
 ```mermaid
 flowchart LR
-  %% ===== Web (Next.js) =====
-  subgraph Web["Next.js (Edge + SSR)"]
+  subgraph Web["Next.js (Vercel/Local)"]
     U[Upload UI] --> MUI[Mapping UI]
-    MUI --> PV[Preview / Errors]
+    MUI --> PV[Preview / Download]
   end
 
-  %% ===== API (Go) =====
-  subgraph Api["Go API"]
-    UP[Upload Handler] --> INF[Mapping Inference]
-    INF --> VAL[Validation / Normalization]
-    VAL --> STG[(staging tables)]
-    COMMIT[Commit Handler] --> TX[(atomic tx)]
-    TX --> CORE[(core tables)]
-    OTel[(traces / metrics / logs)]
+  subgraph API["Go API (Render/Local)"]
+    IMP[/POST /api/imports/]:::ep
+    APPLY[/POST /api/mappings/apply/]:::ep
+    READY[/GET /readyz]:::ep
+    LIVE[/GET /livez]:::ep
   end
 
-  %% ===== DB =====
-  DB[(Postgres)]
-  DB --- STG
-  DB --- CORE
+  subgraph DB["Supabase (Postgres)"]
+    MIG[(migrations)]
+    TPL[(mapping_templates - 予定)]
+  end
 
-  %% ===== Edges between groups =====
-  U -->|multipart/form-data| UP
-  MUI -->|POST /imports/{id}/mappings| INF
-  PV -->|GET /imports/{id}/preview| VAL
-  COMMIT -->|POST /imports/{id}/commit| TX
+  U -->|multipart/form-data| IMP
+  MUI -->|JSON rules| APPLY
+  IMP --> DB
+  APPLY --> DB
+  MIG --> DB
+  classDef ep fill:#eef,stroke:#99f,color:#000;
 ```
-## 起動（Docker）
 
-# リポジトリ直下で
+---
+
+## 🔗 本番デプロイ（参考）
+
+- **Web (Vercel)**: `https://csv-excel-import-ai-mapping-kit.vercel.app/`  
+- **API (Render)**: `https://csv-import-kit-api-prod.onrender.com`  
+- **DB (Supabase)**: 管理は Supabase ダッシュボードから
+
+> Vercel のプロジェクトに **`NEXT_PUBLIC_API_BASE_URL`**（例：Render の API URL）を設定してください。
+
+---
+
+## 🚀 クイックスタート（ローカル）
+
+### 0) 依存
+- Node.js 20+
+- Go 1.23+
+- Docker（任意：ローカルで DB/コンテナを使う場合）
+
+### 1) 環境変数ファイル（リポジトリ直下）
+
+**`.env`（API ランタイム向け）**
+```
+API_PORT=8080
+ALLOWED_ORIGIN=http://localhost:3000
+# ローカルDBの例（compose の db サービスを使う場合）
+DATABASE_URL=postgresql://app:app@localhost:5432/app
+```
+
+**`.env.migrations`（migrate コンテナ向け）**
+```
+# 直結(5432) の URL（sslmode は環境に応じて）
+DATABASE_URL=postgresql://app:app@db:5432/app?sslmode=disable
+```
+
+> Supabase を使う場合：  
+> - **アプリ実行時**はプーリング(例: `aws-...:6543`) の接続文字列を `.env` に  
+> - **マイグレーション**は直結(5432) の接続文字列を `.env.migrations` に設定してください（sslmode=require 推奨）。
+
+### 2) Docker（compose はリポジトリ直下）
+
+```bash
+# 1. ビルド（No cache は任意）
 docker compose build --no-cache
+# 2. 起動
 docker compose up -d
-# 再ビルド & 再起動
-docker compose up -d --build
-# コンテナ削除
-docker compose down
-# コンテナ削除（ボリュームも削除）
-docker compose down -v
-# 停止
-docker compose stop
-# 再開
-docker compose up -d
+# 3. DB マイグレーション（.env.migrations を使用）
+docker compose --env-file .env.migrations run --rm migrator up
+```
 
-# web: http://localhost:3000
-# api: http://localhost:8080/healthz
+確認：
+```bash
+# API ヘルス
+curl -i http://localhost:8080/readyz
+# Web
+open http://localhost:3000
+```
 
-# db migration
+停止 / 再開：
+```bash
+docker compose down           # コンテナ停止+削除
+docker compose down -v        # ボリュームも削除（DB初期化）
+docker compose stop           # 停止のみ
+docker compose up -d          # 再開
+```
 
-# 適用（up）
-docker compose --env-file .env.migrations -f docker-compose.yml run --rm migrator up
+---
 
-# 現在バージョン表示
-docker compose --env-file .env.migrations -f docker-compose.yml run --rm migrator version
+## 🧪 試してみる（テスト CSV）
 
-# 1つ戻す（ロールバック）
-docker compose --env-file .env.migrations -f docker-compose.yml run --rm migrator down 1
+`/imports` 画面から以下をアップロードして確認できます。
+
+- `orders_comma.csv`（カンマ区切り / ヘッダあり）
+- `orders_semicolon.csv`（セミコロン区切り / ヘッダあり）
+- `logs_pipe.csv`（パイプ区切り / ヘッダなし）
+
+フロー：**Upload → ヘッダ/区切りの推定確認 → マッピング調整 → Apply(server) → プレビュー → CSV/JSON ダウンロード**
+
+> 推定が誤った場合は、UI の **「ヘッダあり/なしトグル」**で上書きできます。
+
+---
+
+## 🔌 API Endpoints（現状）
+
+- `POST /api/imports`  
+  CSV を受け取り、`{ delimiter, hasHeader, headers, sampleRows, countGuessed }` を返します。
+
+- `POST /api/mappings/apply`  
+  リクエスト：  
+  ```json
+  {
+    "headers": ["Order ID", "Customer", "..."],
+    "rows": [["1001","1","..."], ["1002","1","..."]],
+    "rules": { "order_id": "Order ID", "customer_id": "Customer", "...": null }
+  }
+  ```
+  レスポンス：  
+  ```json
+  {
+    "normalizedHeaders": ["order_id","customer_id","product","quantity","unit_price","order_date"],
+    "normalizedRows": [["1001","1","Notebook","2","980","2024-06-01"], ...]
+  }
+  ```
+
+- `GET /readyz` / `GET /livez`  
+  ヘルスチェック用。
+
+> CORS は `ALLOWED_ORIGIN` で制御。`OPTIONS` は 204 を返します。
+
+---
+
+## 🛠️ 開発コマンド（最小運用）
+
+ルートの `Makefile` で統一：
+
+```bash
+# 整形（Go fmt + goimports + Prettier write）
+make fmt
+
+# チェック（Go: vet/test, Web: prettier:check + tsc）
+make check
+
+# まとめ（整形 → チェック）
+make all
+```
+
+> Husky（pre-commit）は **format のみ**（`make fmt`）を実行する軽量運用です。
+
+---
+
+## 🗃️ DB Migrations（docker-compose から）
+
+```bash
+# up
+docker compose --env-file .env.migrations run --rm migrator up
+
+# 現在バージョン
+docker compose --env-file .env.migrations run --rm migrator version
+
+# 1つ戻す
+docker compose --env-file .env.migrations run --rm migrator down 1
 
 # 2つ戻す
-docker compose --env-file .env.migrations -f docker-compose.yml run --rm migrator steps -2
+docker compose --env-file .env.migrations run --rm migrator steps -2
+```
 
-.env.migrations には Direct(5432) の postgres:// 形式の URL を DATABASE_URL= で記載してください（sslmode=require 推奨）。
+> マイグレーションファイルは `db/migrations`（**3桁連番** `000_xxx.up.sql` / `.down.sql`）で管理。  
+> 適用後のファイル名変更は履歴の齟齬になるため避けてください。
 
-アプリ実行時は .env の Pooling(6543) を使用します。
+---
 
-migrationファイルは db/migrations 以下に格納
+## 🧭 今後のロードマップ
 
-# deploy
-web: vercel https://csv-excel-import-ai-mapping-kit.vercel.app/
-api: Render https://csv-import-kit-api-prod.onrender.com
-db: supabase https://supabase.com/dashboard/org/egudvdmoiftfuyzkhdfp
+- **テンプレ保存**：`mapping_templates` テーブル（`name`, `schema_key`, `rules`）＋ `/api/templates`（list/create）
+- **結果保存**：正規化済みデータ（行ごとのエラー含む）の保存、または Supabase Storage への CSV 保存
+- **バリデーション**：必須項目未マッピング・型エラーの検出/表示
+- **観測**：リクエストID・処理時間ログ・簡易トレース（OpenTelemetry）
+
+---
+
+## 🐞 Troubleshooting
+
+- **CORS で 403/ERR_FAILED**  
+  `ALLOWED_ORIGIN` が Web の URL と一致しているか確認（ローカルは `http://localhost:3000`）。
+
+- **`database driver: unknown driver`**  
+  migrator の `DATABASE_URL` のスキームが `postgres://` / `postgresql://` になっているか確認。
+
+- **ESLint が騒がしい**  
+  現状は **Prettier + tsc** の最小構成（ESLint は任意）で運用しています。必要になったら段階的に追加してください。
+
+---
+
+## 📄 License
+
+MIT
