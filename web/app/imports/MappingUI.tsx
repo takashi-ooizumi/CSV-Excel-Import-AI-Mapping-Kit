@@ -218,10 +218,7 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
               value={tplDesc}
               onChange={(e) => setTplDesc(e.target.value)}
             />
-            <button
-              className="rounded-lg border px-3 py-2"
-              onClick={onSaveTemplate}
-            >
+            <button className="rounded-lg border px-3 py-2" onClick={onSaveTemplate}>
               Save template
             </button>
           </div>

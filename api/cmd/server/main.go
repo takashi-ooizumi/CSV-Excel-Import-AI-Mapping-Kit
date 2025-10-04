@@ -21,7 +21,7 @@ func main() {
 	// ローカルだけ .env を読む（存在しなくてもOK）
 	_ = godotenv.Load("../.env")
 	_ = godotenv.Load(".env")
-	
+
 	port := os.Getenv("API_PORT")
 	if port == "" {
 		port = "8080"
