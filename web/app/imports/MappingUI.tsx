@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { listTemplates, createTemplate, deleteTemplate, TemplateItem } from "./templatesApi";
 
 type Props = {
   sourceHeaders: string[];
   rows: string[][]; // プレビュー用（先頭N行）
   schema: readonly string[];
-  apiBase: string; // ★ 追加：APIベースURL（親から渡す）
+  apiBase: string; // APIベースURL（親から渡す）
 };
 
 type Rules = Record<string, string | null>;
@@ -43,6 +44,13 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
   const [preview, setPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Templates
+  const [tpls, setTpls] = useState<TemplateItem[]>([]);
+  const [tplLoading, setTplLoading] = useState(false);
+  const [tplName, setTplName] = useState("");
+  const [tplDesc, setTplDesc] = useState("");
+  const [selectedTplId, setSelectedTplId] = useState<string>(""); // ★ 追加
+
   useEffect(() => {
     setRules(guessRules(schema, sourceHeaders));
     setPreview(null);
@@ -54,15 +62,10 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
   const onApply = async () => {
     setLoading(true);
     try {
-      // サーバ適用：/api/mappings/apply
       const res = await fetch(`${apiBase}/api/mappings/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          headers: sourceHeaders,
-          rows,
-          rules, // Record<dest, source|null>
-        }),
+        body: JSON.stringify({ headers: sourceHeaders, rows, rules }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data: { normalizedHeaders: string[]; normalizedRows: string[][] } = await res.json();
@@ -92,15 +95,97 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
     const objs = preview.rows.map((r) =>
       Object.fromEntries(preview.headers.map((h, i) => [h, r[i] ?? ""]))
     );
-    const blob = new Blob([JSON.stringify(objs, null, 2)], {
-      type: "application/json",
-    });
+    const blob = new Blob([JSON.stringify(objs, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "normalized.json";
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // 一覧取得
+  const fetchTemplates = async () => {
+    setTplLoading(true);
+    try {
+      const data = await listTemplates(apiBase);
+      setTpls(data);
+
+      // 選択維持 or リセット
+      if (data.length === 0) {
+        setSelectedTplId("");
+      } else if (selectedTplId) {
+        const stillExists = data.some((t) => t.id === selectedTplId);
+        if (!stillExists) setSelectedTplId("");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to load templates");
+    } finally {
+      setTplLoading(false);
+    }
+  };
+
+  // 初回ロード（任意）
+  useEffect(() => {
+    fetchTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 保存
+  const onSaveTemplate = async () => {
+    if (!tplName.trim()) {
+      alert("Template name is required");
+      return;
+    }
+    const cleaned: Record<string, string> = {};
+    Object.entries(rules).forEach(([k, v]) => {
+      if (v) cleaned[k] = v;
+    });
+
+    try {
+      const { id } = await createTemplate(apiBase, {
+        name: tplName.trim(),
+        schema_key: "orders_v1",
+        rules: cleaned,
+        description: tplDesc || undefined,
+      });
+      alert(`Saved as template (${id})`);
+      setTplName("");
+      setTplDesc("");
+
+      await fetchTemplates();
+      setSelectedTplId(id); // ★ 保存したテンプレを選択状態に
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      alert(`Save failed: ${msg}`);
+    }
+  };
+
+  // 読込 → rules 反映
+  const onLoadTemplate = (id: string) => {
+    const t = tpls.find((x) => x.id === id);
+    if (!t) return;
+    const r = (t.rules ?? {}) as Record<string, string>;
+    const next: Rules = {} as Rules;
+    schema.forEach((k) => {
+      next[k] = (r[k] as string) ?? null;
+    });
+    setRules(next);
+  };
+
+  // 削除
+  const onDeleteTemplate = async () => {
+    if (!selectedTplId) return;
+    if (!confirm("Delete this template?")) return;
+    try {
+      await deleteTemplate(apiBase, selectedTplId);
+      await fetchTemplates();
+      setSelectedTplId("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      alert(`Delete failed: ${msg}`);
+    }
   };
 
   return (
@@ -134,6 +219,75 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
           >
             {loading ? "Applying..." : "Apply mapping (server)"}
           </button>
+        </div>
+      </div>
+
+      {/* テンプレ保存/読込 */}
+      <div className="rounded-xl border p-4">
+        <h3 className="font-semibold mb-3">テンプレート</h3>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* 保存 */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Save as template</div>
+            <input
+              className="border rounded-md px-2 py-1 w-full"
+              placeholder="Template name"
+              value={tplName}
+              onChange={(e) => setTplName(e.target.value)}
+            />
+            <input
+              className="border rounded-md px-2 py-1 w-full"
+              placeholder="Description (optional)"
+              value={tplDesc}
+              onChange={(e) => setTplDesc(e.target.value)}
+            />
+            <button className="rounded-lg border px-3 py-2" onClick={onSaveTemplate}>
+              Save template
+            </button>
+          </div>
+
+          {/* 読込 */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">Load template</div>
+              <button
+                className="rounded-lg border px-2 py-1 text-sm"
+                onClick={fetchTemplates}
+                disabled={tplLoading}
+                title="Refresh"
+              >
+                {tplLoading ? "Loading..." : "Refresh"}
+              </button>
+              <button
+                className="rounded-lg border px-2 py-1 text-sm disabled:opacity-50"
+                onClick={onDeleteTemplate}
+                disabled={!selectedTplId}
+                title="Delete selected"
+              >
+                Delete
+              </button>
+            </div>
+            <select
+              className="border rounded-md px-2 py-1 w-full"
+              value={selectedTplId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedTplId(id);
+                if (id) onLoadTemplate(id);
+              }}
+            >
+              <option value="">Select a template</option>
+              {tpls.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({new Date(t.created_at).toLocaleString()})
+                </option>
+              ))}
+            </select>
+            <div className="text-xs text-gray-500">
+              {tplLoading ? "Loading…" : `Templates: ${tpls.length}`}
+            </div>
+          </div>
         </div>
       </div>
 
