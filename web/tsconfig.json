@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "allowJs": true,
     "incremental": true,
+    "tsBuildInfoFile": ".next/cache/tsconfig.tsbuildinfo",
     "esModuleInterop": true,
     "isolatedModules": true,
     "plugins": [
