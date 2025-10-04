@@ -12,7 +12,10 @@ type Props = {
 type Rules = Record<OrderSchemaKey, string | null>;
 
 function normalizeKey(s: string) {
-  return s.trim().toLowerCase().replace(/[ \-]+/g, "_");
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/[ \-]+/g, "_");
 }
 
 function guessRules(schema: readonly OrderSchemaKey[], headers: string[]): Rules {
@@ -55,17 +58,14 @@ function applyMapping(
 }
 
 function toCSV(headers: string[], rows: string[][]) {
-  const esc = (s: string) =>
-    /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   const lines = [headers.map(esc).join(","), ...rows.map((r) => r.map(esc).join(","))];
   return lines.join("\n");
 }
 
 export default function MappingUI({ sourceHeaders, rows, schema }: Props) {
   const [rules, setRules] = useState<Rules>(() => guessRules(schema, sourceHeaders));
-  const [preview, setPreview] = useState<{ headers: string[]; rows: string[][] } | null>(
-    null
-  );
+  const [preview, setPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
 
   useEffect(() => {
     // アップロードし直した時にも再推測
@@ -80,12 +80,7 @@ export default function MappingUI({ sourceHeaders, rows, schema }: Props) {
   );
 
   const onApply = () => {
-    const { normalizedHeaders, normalizedRows } = applyMapping(
-      sourceHeaders,
-      rows,
-      rules,
-      schema
-    );
+    const { normalizedHeaders, normalizedRows } = applyMapping(sourceHeaders, rows, rules, schema);
     setPreview({ headers: normalizedHeaders, rows: normalizedRows });
   };
 
@@ -129,9 +124,7 @@ export default function MappingUI({ sourceHeaders, rows, schema }: Props) {
               <select
                 className="border rounded-md px-2 py-1 w-full"
                 value={rules[dest] ?? ""}
-                onChange={(e) =>
-                  setRules((prev) => ({ ...prev, [dest]: e.target.value || null }))
-                }
+                onChange={(e) => setRules((prev) => ({ ...prev, [dest]: e.target.value || null }))}
               >
                 {options.map((h) => (
                   <option key={h} value={h}>
@@ -144,10 +137,7 @@ export default function MappingUI({ sourceHeaders, rows, schema }: Props) {
         </div>
 
         <div className="mt-4 flex gap-2">
-          <button
-            className="rounded-lg bg-black text-white px-4 py-2"
-            onClick={onApply}
-          >
+          <button className="rounded-lg bg-black text-white px-4 py-2" onClick={onApply}>
             Apply mapping
           </button>
         </div>
@@ -182,16 +172,10 @@ export default function MappingUI({ sourceHeaders, rows, schema }: Props) {
           </div>
 
           <div className="mt-4 flex gap-2">
-            <button
-              className="rounded-lg border px-4 py-2"
-              onClick={onDownloadCSV}
-            >
+            <button className="rounded-lg border px-4 py-2" onClick={onDownloadCSV}>
               Download CSV
             </button>
-            <button
-              className="rounded-lg border px-4 py-2"
-              onClick={onDownloadJSON}
-            >
+            <button className="rounded-lg border px-4 py-2" onClick={onDownloadJSON}>
               Download JSON
             </button>
           </div>

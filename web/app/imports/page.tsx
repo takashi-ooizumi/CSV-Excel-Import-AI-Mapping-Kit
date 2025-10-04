@@ -17,11 +17,12 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [forceHasHeader, setForceHasHeader] = useState<boolean | null>(null); // ← 上書き用
 
-
   // 環境変数が無い場合のフォールバック（ローカル直叩き）
   const apiBase = useMemo(() => {
-    return process.env.NEXT_PUBLIC_API_BASE_URL ??
-      (typeof window !== "undefined" ? "http://localhost:8080" : "");
+    return (
+      process.env.NEXT_PUBLIC_API_BASE_URL ??
+      (typeof window !== "undefined" ? "http://localhost:8080" : "")
+    );
   }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -33,8 +34,7 @@ export default function ImportPage() {
       fd.append("file", file);
 
       // ヘッダ上書きが選ばれていたらクエリで通知（API側対応済/対応予定どちらでもOK）
-      const qs =
-        forceHasHeader === null ? "" : `?hasHeader=${forceHasHeader ? "true" : "false"}`;
+      const qs = forceHasHeader === null ? "" : `?hasHeader=${forceHasHeader ? "true" : "false"}`;
 
       const res = await fetch(`${apiBase}/api/imports`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
@@ -42,8 +42,7 @@ export default function ImportPage() {
       const data: Preview = await res.json();
 
       // UI 上書きがONならプレビュー側も見た目だけ合わせる
-      const coerced =
-        forceHasHeader === null ? data : { ...data, hasHeader: forceHasHeader };
+      const coerced = forceHasHeader === null ? data : { ...data, hasHeader: forceHasHeader };
 
       setPreview(data);
     } catch (e: any) {
@@ -59,7 +58,8 @@ export default function ImportPage() {
 
       {apiBase === "" && (
         <p className="text-sm text-red-600">
-          NEXT_PUBLIC_API_BASE_URL が未設定です。ローカルなら <code>http://localhost:8080</code> を想定します。
+          NEXT_PUBLIC_API_BASE_URL が未設定です。ローカルなら <code>http://localhost:8080</code>{" "}
+          を想定します。
         </p>
       )}
 
