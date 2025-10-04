@@ -62,18 +62,18 @@ flowchart LR
 ## 起動（Docker）
 
 # リポジトリ直下で
-docker compose -f deploy/docker-compose.yml build --no-cache
-docker compose -f deploy/docker-compose.yml up -d
+docker compose build --no-cache
+docker compose up -d
 # 再ビルド & 再起動
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose up -d --build
 # コンテナ削除
-docker compose -f deploy/docker-compose.yml down
+docker compose down
 # コンテナ削除（ボリュームも削除）
-docker compose -f deploy/docker-compose.yml down -v
+docker compose down -v
 # 停止
-docker compose -f deploy/docker-compose.yml stop
+docker compose stop
 # 再開
-docker compose -f deploy/docker-compose.yml up -d
+docker compose up -d
 
 # web: http://localhost:3000
 # api: http://localhost:8080/healthz
@@ -81,16 +81,16 @@ docker compose -f deploy/docker-compose.yml up -d
 # db migration
 
 # 適用（up）
-docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm migrator up
+docker compose --env-file .env.migrations -f docker-compose.yml run --rm migrator up
 
 # 現在バージョン表示
-docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm migrator version
+docker compose --env-file .env.migrations -f docker-compose.yml run --rm migrator version
 
 # 1つ戻す（ロールバック）
-docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm migrator down 1
+docker compose --env-file .env.migrations -f docker-compose.yml run --rm migrator down 1
 
 # 2つ戻す
-docker compose --env-file .env.migrations -f deploy/docker-compose.yml run --rm migrator steps -2
+docker compose --env-file .env.migrations -f docker-compose.yml run --rm migrator steps -2
 
 .env.migrations には Direct(5432) の postgres:// 形式の URL を DATABASE_URL= で記載してください（sslmode=require 推奨）。
 
