@@ -38,7 +38,7 @@ func main() {
 	r.Post("/api/imports", handlers.HandleUploadPreview())
 
 	r.Post("/api/mappings/apply", handlers.ApplyMapping)
-	
+
 	srv := &http.Server{
 		Addr:              ":" + port,
 		Handler:           r,
