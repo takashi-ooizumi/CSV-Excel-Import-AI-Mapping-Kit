@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { listTemplates, createTemplate, TemplateItem } from "./templatesApi";
 
 type Props = {
   sourceHeaders: string[];
@@ -42,6 +43,10 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
   const [rules, setRules] = useState<Rules>(() => guessRules(schema, sourceHeaders));
   const [preview, setPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tpls, setTpls] = useState<TemplateItem[]>([]);
+  const [tplLoading, setTplLoading] = useState(false);
+  const [tplName, setTplName] = useState("");
+  const [tplDesc, setTplDesc] = useState("");
 
   useEffect(() => {
     setRules(guessRules(schema, sourceHeaders));
@@ -103,6 +108,62 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
     URL.revokeObjectURL(url);
   };
 
+  // テンプレ一覧取得
+  const fetchTemplates = async () => {
+    setTplLoading(true);
+    try {
+      const data = await listTemplates(apiBase);
+      setTpls(data);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to load templates");
+    } finally {
+      setTplLoading(false);
+    }
+  };
+
+  // 保存
+  const onSaveTemplate = async () => {
+    if (!tplName.trim()) {
+      alert("Template name is required");
+      return;
+    }
+    // rules から null を除去して送る（好みでOK）
+    const cleaned: Record<string, string> = {};
+    Object.entries(rules).forEach(([k, v]) => {
+      if (v) cleaned[k] = v;
+    });
+
+    try {
+      const { id } = await createTemplate(apiBase, {
+        name: tplName.trim(),
+        schema_key: "orders_v1",
+        rules: cleaned,
+        description: tplDesc || undefined,
+      });
+      alert(`Saved as template (${id})`);
+      setTplName("");
+      setTplDesc("");
+      fetchTemplates();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      alert(`Save failed: ${msg}`);
+    }
+  };
+
+  // 適用（読込）
+  const onLoadTemplate = (id: string) => {
+    const t = tpls.find((x) => x.id === id);
+    if (!t) return;
+    const r = (t.rules ?? {}) as Record<string, string>;
+    // schema のキーだけを反映（安全）
+    const next: Rules = {} as Rules;
+    schema.forEach((k) => {
+      next[k] = (r[k] as string) ?? null;
+    });
+    setRules(next);
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border p-4">
@@ -134,6 +195,65 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
           >
             {loading ? "Applying..." : "Apply mapping (server)"}
           </button>
+        </div>
+      </div>
+
+      {/* テンプレ保存/読込 */}
+      <div className="rounded-xl border p-4">
+        <h3 className="font-semibold mb-3">テンプレート</h3>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* 保存 */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Save as template</div>
+            <input
+              className="border rounded-md px-2 py-1 w-full"
+              placeholder="Template name"
+              value={tplName}
+              onChange={(e) => setTplName(e.target.value)}
+            />
+            <input
+              className="border rounded-md px-2 py-1 w-full"
+              placeholder="Description (optional)"
+              value={tplDesc}
+              onChange={(e) => setTplDesc(e.target.value)}
+            />
+            <button
+              className="rounded-lg border px-3 py-2"
+              onClick={onSaveTemplate}
+            >
+              Save template
+            </button>
+          </div>
+
+          {/* 読込 */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">Load template</div>
+              <button
+                className="rounded-lg border px-2 py-1 text-sm"
+                onClick={fetchTemplates}
+                disabled={tplLoading}
+                title="Refresh"
+              >
+                {tplLoading ? "Loading..." : "Refresh"}
+              </button>
+            </div>
+            <select
+              className="border rounded-md px-2 py-1 w-full"
+              onChange={(e) => e.target.value && onLoadTemplate(e.target.value)}
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Select a template
+              </option>
+              {tpls.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({new Date(t.created_at).toLocaleString()})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
