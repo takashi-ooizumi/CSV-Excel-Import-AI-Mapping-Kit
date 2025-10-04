@@ -145,6 +145,7 @@ export default function ImportPage() {
             sourceHeaders={preview.headers}
             rows={preview.sampleRows ?? []}
             schema={ORDER_SCHEMA_V1}
+            apiBase={apiBase}
           />
         </div>
       )}
