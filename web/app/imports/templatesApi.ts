@@ -27,3 +27,8 @@ export async function createTemplate(
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export async function deleteTemplate(apiBase: string, id: string): Promise<void> {
+  const res = await fetch(`${apiBase}/api/templates/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
+}

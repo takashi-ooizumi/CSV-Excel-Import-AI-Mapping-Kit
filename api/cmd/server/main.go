@@ -63,6 +63,8 @@ func main() {
 	tpl := handlers.NewTemplateHandler(st)
 	r.Post("/api/templates", tpl.CreateTemplate)
 	r.Get("/api/templates", tpl.ListTemplates)
+	r.Get("/api/templates/{id}", tpl.GetTemplateByID)
+	r.Delete("/api/templates/{id}", tpl.DeleteTemplate)
 
 	// --- HTTP Server（タイムアウト強化 & Graceful Shutdown） ---
 	srv := &http.Server{

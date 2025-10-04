@@ -347,11 +347,13 @@ func CORSMiddleware() func(next http.Handler) http.Handler {
 	if raw == "" {
 		raw = "http://localhost:3000"
 	}
-
 	origins := strings.Split(raw, ",")
 	for i := range origins {
 		origins[i] = strings.TrimSpace(origins[i])
 	}
+
+	// 固定で許可するメソッド（DELETE/PUT/PATCH を追加）
+	const allowMethods = "GET,POST,DELETE,PUT,PATCH,OPTIONS"
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -373,7 +375,7 @@ func CORSMiddleware() func(next http.Handler) http.Handler {
 				w.Header().Set("Vary", "Origin")
 				w.Header().Set("Access-Control-Allow-Origin", allowed)
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
-				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,PUT,PATCH,OPTIONS")
 			}
 
 			// プリフライトは許可が決まった時だけ 204 を返す

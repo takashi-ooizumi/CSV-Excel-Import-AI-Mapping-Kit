@@ -10,6 +10,7 @@ import (
 
 	"csv-import-kit/api/internal/store"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -119,4 +120,71 @@ limit 20;
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// GET /api/templates/{id}
+func (h *TemplateHandler) GetTemplateByID(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+
+	const q = `
+select id, name, schema_key, rules, description, created_at, updated_at
+from public.mapping_templates
+where id = $1
+limit 1;
+`
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	var t Template
+	var rawRules []byte
+	err := h.Store.Pool.QueryRow(ctx, q, id).Scan(
+		&t.ID, &t.Name, &t.SchemaKey, &rawRules, &t.Description, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "db query error", http.StatusInternalServerError)
+		return
+	}
+	if len(rawRules) > 0 {
+		if err := json.Unmarshal(rawRules, &t.Rules); err != nil {
+			http.Error(w, "rules unmarshal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(t)
+}
+
+// DELETE /api/templates/{id}
+func (h *TemplateHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+
+	const q = `delete from public.mapping_templates where id = $1;`
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	ct, err := h.Store.Pool.Exec(ctx, q, id)
+	if err != nil {
+		http.Error(w, "db delete error", http.StatusInternalServerError)
+		return
+	}
+	if ct.RowsAffected() == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { listTemplates, createTemplate, TemplateItem } from "./templatesApi";
+import { listTemplates, createTemplate, deleteTemplate, TemplateItem } from "./templatesApi";
 
 type Props = {
   sourceHeaders: string[];
   rows: string[][]; // プレビュー用（先頭N行）
   schema: readonly string[];
-  apiBase: string; // ★ 追加：APIベースURL（親から渡す）
+  apiBase: string; // APIベースURL（親から渡す）
 };
 
 type Rules = Record<string, string | null>;
@@ -43,10 +43,13 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
   const [rules, setRules] = useState<Rules>(() => guessRules(schema, sourceHeaders));
   const [preview, setPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Templates
   const [tpls, setTpls] = useState<TemplateItem[]>([]);
   const [tplLoading, setTplLoading] = useState(false);
   const [tplName, setTplName] = useState("");
   const [tplDesc, setTplDesc] = useState("");
+  const [selectedTplId, setSelectedTplId] = useState<string>(""); // ★ 追加
 
   useEffect(() => {
     setRules(guessRules(schema, sourceHeaders));
@@ -59,15 +62,10 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
   const onApply = async () => {
     setLoading(true);
     try {
-      // サーバ適用：/api/mappings/apply
       const res = await fetch(`${apiBase}/api/mappings/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          headers: sourceHeaders,
-          rows,
-          rules, // Record<dest, source|null>
-        }),
+        body: JSON.stringify({ headers: sourceHeaders, rows, rules }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data: { normalizedHeaders: string[]; normalizedRows: string[][] } = await res.json();
@@ -97,9 +95,7 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
     const objs = preview.rows.map((r) =>
       Object.fromEntries(preview.headers.map((h, i) => [h, r[i] ?? ""]))
     );
-    const blob = new Blob([JSON.stringify(objs, null, 2)], {
-      type: "application/json",
-    });
+    const blob = new Blob([JSON.stringify(objs, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -108,12 +104,20 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
     URL.revokeObjectURL(url);
   };
 
-  // テンプレ一覧取得
+  // 一覧取得
   const fetchTemplates = async () => {
     setTplLoading(true);
     try {
       const data = await listTemplates(apiBase);
       setTpls(data);
+
+      // 選択維持 or リセット
+      if (data.length === 0) {
+        setSelectedTplId("");
+      } else if (selectedTplId) {
+        const stillExists = data.some((t) => t.id === selectedTplId);
+        if (!stillExists) setSelectedTplId("");
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to load templates");
@@ -122,13 +126,18 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
     }
   };
 
+  // 初回ロード（任意）
+  useEffect(() => {
+    fetchTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 保存
   const onSaveTemplate = async () => {
     if (!tplName.trim()) {
       alert("Template name is required");
       return;
     }
-    // rules から null を除去して送る（好みでOK）
     const cleaned: Record<string, string> = {};
     Object.entries(rules).forEach(([k, v]) => {
       if (v) cleaned[k] = v;
@@ -144,24 +153,39 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
       alert(`Saved as template (${id})`);
       setTplName("");
       setTplDesc("");
-      fetchTemplates();
+
+      await fetchTemplates();
+      setSelectedTplId(id); // ★ 保存したテンプレを選択状態に
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       alert(`Save failed: ${msg}`);
     }
   };
 
-  // 適用（読込）
+  // 読込 → rules 反映
   const onLoadTemplate = (id: string) => {
     const t = tpls.find((x) => x.id === id);
     if (!t) return;
     const r = (t.rules ?? {}) as Record<string, string>;
-    // schema のキーだけを反映（安全）
     const next: Rules = {} as Rules;
     schema.forEach((k) => {
       next[k] = (r[k] as string) ?? null;
     });
     setRules(next);
+  };
+
+  // 削除
+  const onDeleteTemplate = async () => {
+    if (!selectedTplId) return;
+    if (!confirm("Delete this template?")) return;
+    try {
+      await deleteTemplate(apiBase, selectedTplId);
+      await fetchTemplates();
+      setSelectedTplId("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      alert(`Delete failed: ${msg}`);
+    }
   };
 
   return (
@@ -235,21 +259,34 @@ export default function MappingUI({ sourceHeaders, rows, schema, apiBase }: Prop
               >
                 {tplLoading ? "Loading..." : "Refresh"}
               </button>
+              <button
+                className="rounded-lg border px-2 py-1 text-sm disabled:opacity-50"
+                onClick={onDeleteTemplate}
+                disabled={!selectedTplId}
+                title="Delete selected"
+              >
+                Delete
+              </button>
             </div>
             <select
               className="border rounded-md px-2 py-1 w-full"
-              onChange={(e) => e.target.value && onLoadTemplate(e.target.value)}
-              defaultValue=""
+              value={selectedTplId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedTplId(id);
+                if (id) onLoadTemplate(id);
+              }}
             >
-              <option value="" disabled>
-                Select a template
-              </option>
+              <option value="">Select a template</option>
               {tpls.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} ({new Date(t.created_at).toLocaleString()})
                 </option>
               ))}
             </select>
+            <div className="text-xs text-gray-500">
+              {tplLoading ? "Loading…" : `Templates: ${tpls.length}`}
+            </div>
           </div>
         </div>
       </div>
