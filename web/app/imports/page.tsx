@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import MappingUI from "./MappingUI";
 import { ORDER_SCHEMA_V1 } from "./schema";
 
@@ -11,11 +11,19 @@ type Preview = {
   countGuessed: number;
 };
 
+type SampleCsv = {
+  filename: string;
+  downloadPath: string;
+};
+
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
   const [forceHasHeader, setForceHasHeader] = useState<boolean | null>(null); // ← 上書き用
+  const [sampleCsvs, setSampleCsvs] = useState<SampleCsv[]>([]);
+  const [sampleError, setSampleError] = useState<string | null>(null);
+  const [loadingSamples, setLoadingSamples] = useState(true);
 
   // 環境変数が無い場合のフォールバック（ローカル直叩き）
   const apiBase = useMemo(() => {
@@ -24,6 +32,48 @@ export default function ImportPage() {
       (typeof window !== "undefined" ? "http://localhost:8080" : "")
     );
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSamples = async () => {
+      try {
+        const res = await fetch("/api/sample-csv");
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        const data: { files: SampleCsv[] } = await res.json();
+        if (!cancelled) {
+          setSampleCsvs(data.files ?? []);
+          setSampleError(null);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setSampleError("サンプルCSVの取得に失敗しました");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingSamples(false);
+        }
+      }
+    };
+
+    loadSamples();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const downloadSample = (downloadPath: string) => {
+    if (typeof document === "undefined") return;
+    const link = document.createElement("a");
+    link.href = downloadPath;
+    link.download = "";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +112,36 @@ export default function ImportPage() {
           を想定します。
         </p>
       )}
+
+      <section className="rounded border border-gray-200 bg-gray-50 p-4 space-y-2">
+        <h2 className="font-semibold">サンプルCSVをダウンロード</h2>
+        <p className="text-sm text-gray-600">フォーマット確認や動作確認にそのまま使えるCSVです。</p>
+        {sampleError && <p className="text-sm text-red-600">{sampleError}</p>}
+        {!sampleError && (
+          <ul className="space-y-2">
+            {loadingSamples && <li className="text-sm text-gray-600">読み込み中...</li>}
+            {!loadingSamples && sampleCsvs.length === 0 && (
+              <li className="text-sm text-gray-600">サンプルCSVが見つかりません。</li>
+            )}
+            {!loadingSamples &&
+              sampleCsvs.map((sample) => (
+                <li
+                  key={sample.filename}
+                  className="flex items-center justify-between rounded border border-gray-200 bg-white px-3 py-2 text-sm"
+                >
+                  <span className="text-gray-700">{sample.filename}</span>
+                  <button
+                    type="button"
+                    onClick={() => downloadSample(sample.downloadPath)}
+                    className="rounded bg-black px-3 py-1 text-white hover:bg-gray-800"
+                  >
+                    ダウンロード
+                  </button>
+                </li>
+              ))}
+          </ul>
+        )}
+      </section>
 
       <form onSubmit={onSubmit} className="space-y-3">
         <input
