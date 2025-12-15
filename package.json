@@ -7,7 +7,14 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "api/**/*.go": ["golangci-lint run --out-format=colored-line-number ./api/..."],
-    "web/**/*.{ts,tsx,js,jsx,css,md,json}": ["prettier --write"]
+    "api/**/*.go": [
+      "golangci-lint run --out-format=colored-line-number ./api/..."
+    ],
+    "web/**/*.{ts,tsx,js,jsx,css,md,json}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "next": "^14.2.35"
   }
 }
